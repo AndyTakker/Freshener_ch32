@@ -1,0 +1,13 @@
+# Если какие-то файлы начали отслеживаться git до включения их в gitignore
+# их нужно удалить из индекса, например, командой:
+# git rm -r --cached "filename"
+#
+
+# FreeCAD
+*.FCBak
+
+# KiCAD
+*.lck
+\#auto_saved_files#
+fp-info-cache
+**/*-backups/

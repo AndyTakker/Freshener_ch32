@@ -1,6 +1,6 @@
 // Управление двигателем постоянного тока, приводом каретки рейсмуса.
 
-#include <Driver_TA6586.h>
+#include "Driver_TA6586.h"
 
 Driver::Driver(PinName pinDriverFw, PinName pinDriverRw) {
     pinFw = pinDriverFw;
@@ -19,7 +19,7 @@ Driver::Driver(PinName pinDriverFw, PinName pinDriverRw) {
 void Driver::forward(void) {
     pinWrite(pinFw, HIGH);
     pinWrite(pinRw, LOW);
-    state = Forward;
+    state = DrvState::Forward;
 }
 
 //==============================================================================
@@ -28,7 +28,7 @@ void Driver::forward(void) {
 void Driver::reward(void) {
     pinWrite(pinFw,LOW);
     pinWrite(pinRw, HIGH);
-    state = Reward;
+    state = DrvState::Reward;
 }
 
 //==============================================================================
@@ -37,7 +37,7 @@ void Driver::reward(void) {
 void Driver::stop(void){
    pinWrite(pinFw, LOW);  
    pinWrite(pinRw, LOW);  
-   state = Stopped;
+   state = DrvState::Stopped;
 }
 
 //==============================================================================
@@ -46,7 +46,7 @@ void Driver::stop(void){
 void Driver::braking(void){
     pinWrite(pinFw, HIGH);
     pinWrite(pinRw, HIGH);
-    state = Braking;
+    state = DrvState::Braking;
     delay(BRAKING_DELAY);
     stop();
 }
@@ -54,6 +54,6 @@ void Driver::braking(void){
 //==============================================================================
 // Вернуть текущий статус двигателя
 //------------------------------------------------------------------------------
-drvState Driver::getState(void) {
+DrvState Driver::getState(void) {
     return state;
 }

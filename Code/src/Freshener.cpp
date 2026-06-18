@@ -11,51 +11,22 @@
 // В состоянии, когда свет включен, можно пшикнуть кнопкой на морде, если она
 // имеется.
 //------------------------------------------------------------------------------
-#include <Driver_TA6586.h>
-#include <Logs.h>
-#include <SysClock.h>
-#include <ch32Pins.hpp>
-#include <debug.h>
-#include <stdint.h>
-
-#define pinPress PC1   // Выход нажатия на распылитель
-#define pinRelease PC2 // Выход возврата распылителя в исходное положение
-// #define pinLed PD7     // Светодиод на корпусе (на PD7 почему-то не заработал)
-#define pinLed PD4     // Светодиод на корпусе
-#define pinLight PC3   // Вход датчика освещенности (13кОм на землю, датчик к +3.3в)
-#define pinBtn PC4     // Кнопка на корпусе
-
-#define sittingTime 240000  // 4*60*1000 Время сидения, после которого пшикаем
-#define shortSitTime 120000 // 2*60*1000 Короткое время (для жены)
-// #define sittingTime 5000 // для отладки
-
-#define ON 1
-#define OFF 0
-#define HIGH 1
-#define LOW 0
-
-#define LED_ON() pinWrite(pinLed, HIGH)    // Включить светодиод
-#define LED_OFF() pinWrite(pinLed, LOW)    // Погасить светодиод
-#define bttnPressed pinRead(pinBtn) == LOW // Кнопка нажата
-
-void pshik(uint8_t cnt);    // Пшикаем
-void ledBlink(uint8_t cnt); // Мигнем светодиодом
-void system_sleep(void);    // Переход в спячку
+#include <Freshener.h>
 
 uint32_t lightOn = 0; // Момент включения света
 
-Driver drv(pinPress, pinRelease);
+Driver drv(Pins::Press, Pins::Release);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-void EXTI7_0_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void EXTI7_0_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast"), used, section(".text.irq")));
 void EXTI7_0_IRQHandler(void) {
-  if (EXTI_GetITStatus(extiLine(pinLight)) != RESET) { // Проснулись по датчику света
-    EXTI_ClearITPendingBit(extiLine(pinLight));        // Очистка флага прерывания
+  if (EXTI_GetITStatus(extiLine(Pins::Light)) != RESET) { // Проснулись по датчику света
+    EXTI_ClearITPendingBit(extiLine(Pins::Light));        // Очистка флага прерывания
   }
-  if (EXTI_GetITStatus(extiLine(pinBtn)) != RESET) { // Проснулись по кнопке
-    EXTI_ClearITPendingBit(extiLine(pinBtn));        // Очистка флага прерывания
+  if (EXTI_GetITStatus(extiLine(Pins::Btn)) != RESET) { // Проснулись по кнопке
+    EXTI_ClearITPendingBit(extiLine(Pins::Btn));        // Очистка флага прерывания
   }
 }
 #ifdef __cplusplus
@@ -73,13 +44,13 @@ int main() {
 
   // Настройка выводов контроллера - драйвер свои пины сам настроит
 
-  pinMode(pinLed, GPIO_Mode_Out_PP); // Пин светодиода (на PD7 почему-то не заработал)
+  pinMode(Pins::Led, GPIO_Mode_Out_PP); // Пин светодиода (на PD7 почему-то не заработал)
   LED_OFF();
 
-  pinMode(pinBtn, GPIO_Mode_IPU);
-  pinExtiInit(pinBtn, EXTI_Trigger_Falling); // Подключаем прерывание - просыпаемся по кнопке
-  pinMode(pinLight, GPIO_Mode_IPU);
-  pinExtiInit(pinLight, EXTI_Trigger_Falling); // Подключаем прерывание - просыпаемся по свету
+  pinMode(Pins::Btn, GPIO_Mode_IPU);
+  pinExtiInit(Pins::Btn, EXTI_Trigger_Falling); // Подключаем прерывание - просыпаемся по кнопке
+  pinMode(Pins::Light, GPIO_Mode_IPU);
+  pinExtiInit(Pins::Light, EXTI_Trigger_Falling); // Подключаем прерывание - просыпаемся по свету
 
   // При включении помигаем светодиодом, показывая, что включаемся
   ledBlink(5);
@@ -88,14 +59,13 @@ int main() {
   // Если же сеть/свет есть, то уйдем в спячку и сразу проснемся.
   logs("Sleep on start...\r\n");
   system_sleep(); // Сразу в сон после включения
-  // pshik(5);
   logs("Wake up...\r\n");
 
   bool lightState = OFF;
   while (1) {
-
-    bool prevState = lightState;     // Предыдущее состояние света
-    lightState = !pinRead(pinLight); // Текущее состояние света
+    delay(100);
+    bool prevState = lightState;        // Предыдущее состояние света
+    lightState = !pinRead(Pins::Light); // Текущее состояние света
     // Если состояние света изменилось (свет был выключен и включился, или наоборот)
     if (lightState != prevState) {
       prevState = lightState;
@@ -105,19 +75,21 @@ int main() {
         LED_ON();
       } else { // Свет выключили
         if (lightOn != 0) {
+          logs("Light on: %lu\r\n", now - lightOn);
           if (now - lightOn > sittingTime) { // Свет горел дольше заданного значения, нужно пшикать
             ledBlink(1);
-            pshik(4);
+            pshik(longCnt);
           } else {
             if (now - lightOn > shortSitTime) { // Свет горел по меньшему порогу, нужно пшикать, но меньше
               ledBlink(1);
-              pshik(2);
+              pshik(shortCnt);
             }
           }
         }
         // И тут засыпаем, т.к. свет уже погас и пшики сделаны (если должны были)
         lightOn = 0;
         ledBlink(3);
+        logs("Sleep...\r\n");
         system_sleep();
       }
     }
@@ -137,10 +109,10 @@ int main() {
 // время в одну сторону, затем в другую.
 //------------------------------------------------------------------------------
 void pshik(uint8_t cnt) {
-  const uint16_t pressTime = 1000;   // Время включения двигателя для нажатия
-  const uint16_t releaseTime = 1000; // Время включения двигателя на отпускание
-  const uint16_t pause = 200;        // Пауза после нажатия перед отпусканием
-  const uint16_t pauseBetween = 500; // Пауза между пшиками
+  constexpr uint16_t pressTime = 1000;   // Время включения двигателя для нажатия
+  constexpr uint16_t releaseTime = 1000; // Время включения двигателя на отпускание
+  constexpr uint16_t pause = 200;        // Пауза после нажатия перед отпусканием
+  constexpr uint16_t pauseBetween = 500; // Пауза между пшиками
 
   for (uint8_t i = 0; i < cnt; i++) {
     // Нажатие
